@@ -1,8 +1,5 @@
 import tensorflow as tf
 import numpy as np
-#from tensorflow.examples.tutorials.mnist import input_data
-# number 1 to 10 data
-#mnist = input_data.read_data_sets('MNIST_data',one_hot=True)
 
 #data = np.load('../NR-ER/NR-ER-train/names_onehots.npy')
 #data = data.item()
@@ -15,6 +12,8 @@ dictlength = len(onehotArr[0]) #72， inputs
 datalength = len(onehotArr)#
 
 onelength = len(onehotArr[0][0]) #300，
+batch = 100
+size = 100
 
 labels = np.genfromtxt('../NR-ER/NR-ER-train/names_labels.csv',delimiter=',',dtype=None)
 label = []
@@ -28,20 +27,17 @@ for m in range(0, datalength):
     else:
         label[m] = [0, 1]
 
-#print(label[0])
 
-#target_data =
-#print("data:{}",data)
-
-def compute_accuracy(v_xs,v_ys):
+def compute_accuracy(v_xs,v_ys,size):
     global prediction
-    v_xs = np.reshape(v_xs, (20,dictlength*onelength))
-    v_ys = np.reshape(v_ys, (20,2))
+    v_xs = np.reshape(v_xs, (size,dictlength*onelength))
+    v_ys = np.reshape(v_ys, (size,2))
     #batch_ys = np.reshape(batch_ys, (90,2))
     y_pre = sess.run(prediction, feed_dict={xs:v_xs,keep_prob:1})
     correct_prediction = tf.equal(tf.argmax(y_pre,1),tf.argmax(v_ys,1))
     accuracy = tf.reduce_mean(tf.cast(correct_prediction,tf.float32))
     result = sess.run(accuracy, feed_dict={xs:v_xs,ys:v_ys,keep_prob:1})
+
     return result
 
 def next_batch(train_data, train_target, batch_size):
@@ -64,7 +60,7 @@ def weight_variable(shape):
     return tf.Variable(initial)
 
 def bias_variable(shape):
-    initial = tf.constant(0.1,shape=shape)
+    initial = tf.constant(0.0,shape=shape)
     return tf.Variable(initial)
 
 def conv2d(x,W):
@@ -87,31 +83,31 @@ x_image = tf.reshape(xs,[-1,72,398,1])#1 b&w
 #print(x_image.shape)#[n_samples,28,28,1]
 
 ## conv1 layer ##
-W_conv1 = weight_variable([5,5,1,32]) #patch 5x5, in size 1, out size 32
+W_conv1 = weight_variable([19,19,1,32]) #patch 5x5, in size 1, out size 32
 b_conv1 = bias_variable([32])
 h_conv1 = tf.nn.relu(conv2d(x_image,W_conv1)+b_conv1)
 h_pool1 = max_pool_2x2(h_conv1)
 
 ## conv2 layer ##
-W_conv2 = weight_variable([5,5,32,64]) #patch 5x5, in size 32, out size 64
+W_conv2 = weight_variable([19,19,32,64]) #patch 5x5, in size 32, out size 64
 b_conv2 = bias_variable([64])
 h_conv2 = tf.nn.relu(conv2d(h_pool1,W_conv2)+b_conv2) #14x14x64
 h_pool2 = max_pool_2x2(h_conv2)  #7x7x64
 
 ## func1 layer ##
-W_fc1 = weight_variable([18*100*64,1024])
-b_fc1 = bias_variable([1024])
+W_fc1 = weight_variable([18*100*64,2048])
+b_fc1 = bias_variable([2048])
 h_pool2_flat = tf.reshape(h_pool2,[-1,18*100*64])
-h_fc1 = tf.nn.relu(tf.matmul(h_pool2_flat,W_fc1)+b_fc1)
+h_fc1 = tf.nn.sigmoid(tf.matmul(h_pool2_flat,W_fc1)+b_fc1)
 h_fc1_drop = tf.nn.dropout(h_fc1,keep_prob)
 
 ## func2 layer ##
-W_fc2 = weight_variable([1024,2])
+W_fc2 = weight_variable([2048,2])
 b_fc2 = bias_variable([2])
 prediction = tf.nn.softmax(tf.matmul(h_fc1_drop,W_fc2)+b_fc2)
 
 #the error between prediction and real data
-cross_entropy = tf.reduce_mean(-tf.reduce_sum(ys*tf.log(prediction),reduction_indices=[1]))#loss
+cross_entropy = tf.reduce_mean(-tf.reduce_sum(ys * tf.log(prediction+ 1e-10),reduction_indices=[1]))#loss
 train_step = tf.train.AdamOptimizer(1e-4).minimize(cross_entropy)
 
 sess = tf.Session()
@@ -119,11 +115,16 @@ init = tf.global_variables_initializer()
 sess.run(init)
 #merged = tf.summary.merge_all()
 
-for i in range(1000):
+for i in range(10):
 
-    batch_xs,batch_ys = next_batch(onehotArr,label,40)
-    batch_xs = np.reshape(batch_xs, (40,dictlength*onelength))
-    batch_ys = np.reshape(batch_ys, (40,2))
-    sess.run(train_step,feed_dict={xs:batch_xs,ys:batch_ys,keep_prob:0.5})
-    if i % 50 == 0:
-        print(compute_accuracy(onehotArr[:20],label[:20]))
+    batch_xs,batch_ys = next_batch(onehotArr,label,batch)
+    batch_xs = np.reshape(batch_xs, (batch,dictlength*onelength))
+    batch_ys = np.reshape(batch_ys, (batch,2))
+    #v_xs = np.reshape(onehotArr[:size], (size,dictlength*onelength))
+    #v_ys = np.reshape(label[:size], (size,2))
+    sess.run(train_step,feed_dict={xs:batch_xs,ys:batch_ys,keep_prob:1})#0.5 change to 1
+    if i % 5 == 0:
+        print(compute_accuracy(onehotArr[:size],label[:size],size))
+
+saver = tf.train.Saver()
+saver.save(sess,'./my_model',global_step=1)
